@@ -7,6 +7,13 @@ param(
     [Parameter(Mandatory=$False)][switch]$disableMetrics = $false
 )
 Set-StrictMode -Version Latest
+
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-NOT $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "You must run this script as Administrator"
+	Exit
+}
+
 # Powershell2-compatible way of forcing named-parameters
 if ($badParam)
 {
@@ -60,6 +67,37 @@ if ($LASTEXITCODE -ne 0)
     throw
 }
 
+$registryPathUser = "HKCU:\Environment"
+$registryPathAll = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
+$cmakeToolchainFile = "$vcpkgRootDir\scripts\buildsystems\vcpkg.cmake"
+
+$prompt = Read-Host -Prompt "Set VCPKG_ROOT environment variable (C=Current user, A=All users, N=no)"
+if ($prompt -eq "c" -or $prompt -eq "C") {
+    New-ItemProperty -Path $registryPathUser -Name "VCPKG_ROOT" -Value "$vcpkgRootDir" -PropertyType String -Force | Out-Null
+    $Env:VCPKG_ROOT="$vcpkgRootDir"
+}
+elseif ($prompt -eq "a" -or $prompt -eq "A") {	
+    New-ItemProperty -Path $registryPathAll -Name "VCPKG_ROOT" -Value "$vcpkgRootDir" -PropertyType String -Force | Out-Null
+    $Env:VCPKG_ROOT="$vcpkgRootDir"
+}
+
+$prompt = Read-Host -Prompt "Set CMAKE_TOOLCHAIN_FILE environment variable (C=Current user, A=All users, N=no)"
+if ($prompt -eq "c" -or $prompt -eq "C") {
+    New-ItemProperty -Path $registryPathUser -Name "CMAKE_TOOLCHAIN_FILE" -Value "$cmakeToolchainFile" -PropertyType String -Force | Out-Null
+    $Env:CMAKE_TOOLCHAIN_FILE="$cmakeToolchainFile"
+}
+elseif ($prompt -eq "a" -or $prompt -eq "A") {	
+    New-ItemProperty -Path $registryPathAll -Name "CMAKE_TOOLCHAIN_FILE" -Value "$cmakeToolchainFile" -PropertyType String -Force | Out-Null
+    $Env:CMAKE_TOOLCHAIN_FILE="$cmakeToolchainFile"
+}
+
+$prompt = Read-Host -Prompt "Install VCPKG executable in System folder (Y=yes, N=no)"
+if ($prompt -eq "y" -or $prompt -eq "Y") {
+	Copy-Item -Path "$vcpkgRootDir\vcpkg.exe" -Destination "$Env:SystemRoot\System32"
+}
+
+Write-Host ""
+
 if ($disableMetrics)
 {
     Set-Content -Value "" -Path "$vcpkgRootDir\vcpkg.disable-metrics" -Force
@@ -80,3 +118,5 @@ or by setting the VCPKG_DISABLE_METRICS environment variable.
 Read more about vcpkg telemetry at docs/about/privacy.md
 "@
 }
+
+"$vcpkgRootDir\vcpkg.exe" integrate install
